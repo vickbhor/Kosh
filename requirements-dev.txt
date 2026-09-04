@@ -1,0 +1,2 @@
+# Runtime dependencies: none. The engine, HTTP layer and ledger are stdlib only.
+pytest>=8.0

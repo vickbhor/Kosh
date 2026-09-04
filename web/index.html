@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kosh — settlement reconciliation that refuses to guess</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230A0A08'/><path d='M8 7v18M8 16l9-9M8 16l9 9' stroke='%23E8A33D' stroke-width='3' fill='none'/></svg>">
+<style>
+@font-face{font-family:'Archivo';src:url('/vendor/archivo.woff2') format('woff2');
+  font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+@font-face{font-family:'JBMono';src:url('/vendor/jbmono.woff2') format('woff2');
+  font-weight:100 800;font-display:swap}
+
+:root{
+  --bg:#0A0A08; --fg:#F2EDE3; --muted:#8B8C80; --faint:#5C5E54;
+  --rule:#23251E; --rule-2:#1A1C16; --panel:#101208;
+  --accent:#E8A33D; --green:#7CC79A; --blue:#5B9BD5; --red:#E2543C;
+  --sans:'Archivo',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono:'JBMono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --gut:clamp(20px,5.5vw,80px);
+}
+.light{
+  --bg:#F1ECE1; --fg:#14150F; --muted:#5D6055; --faint:#8B8E82;
+  --rule:#D5CFC0; --rule-2:#E2DCCD; --panel:#E8E2D4; --accent:#A2701A;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; background:#0A0A08}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+  font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1440px;margin:0 auto;padding:0 var(--gut)}
+.wrap-wide{max-width:1760px;margin:0 auto;padding:0 var(--gut)}
+
+.grain{position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.055;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(10,10,8,.9);
+  backdrop-filter:blur(16px);border-bottom:1px solid var(--rule-2)}
+.nav-in{display:flex;align-items:center;gap:24px;height:64px;max-width:1440px;
+  margin:0 auto;padding:0 var(--gut);color:#F2EDE3}
+section[id]{scroll-margin-top:64px}
+.mark{display:flex;align-items:baseline;gap:9px;font-weight:800;font-stretch:118%;
+  font-size:19px;letter-spacing:.02em}
+.mark s{text-decoration:none;font-family:system-ui;font-weight:400;font-size:13px;opacity:.55}
+.nav ol{display:flex;gap:26px;margin:0 0 0 auto;padding:0;list-style:none;
+  font-family:var(--mono);font-size:11px;letter-spacing:.13em}
+.nav a{color:inherit;text-decoration:none;opacity:.55;transition:opacity .2s}
+.nav a:hover,.nav a.on{opacity:1}
+@media(max-width:900px){.nav ol{display:none}}
+
+.hero{min-height:100svh;display:flex;flex-direction:column;justify-content:center;
+  padding:120px 0 40px;position:relative}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--accent);margin:0 0 30px}
+.display{margin:0;font-weight:800;font-stretch:112%;letter-spacing:-.035em;
+  font-size:clamp(46px,11.4vw,168px);line-height:.86;text-transform:uppercase}
+.display .ln{display:block;overflow:hidden}
+.display .ln span{display:block;transform:translateY(105%);
+  transition:transform 1s cubic-bezier(.16,1,.3,1)}
+.ready .display .ln span{transform:none}
+.display .ln:nth-child(2) span{transition-delay:.1s}
+.display .ln:nth-child(3) span{transition-delay:.2s}
+.display .amber{color:var(--accent)}
+.lede{margin:38px 0 0;max-width:56ch;color:var(--muted);font-size:clamp(15px,1.35vw,19px)}
+.cue{margin-top:auto;padding-top:48px;display:flex;align-items:flex-end;gap:28px;
+  border-top:1px solid var(--rule);flex-wrap:wrap}
+.cue .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--faint)}
+
+.ticker{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  overflow:hidden;padding:16px 0;white-space:nowrap}
+.ticker div{display:inline-block;animation:slide 34s linear infinite;
+  font-weight:700;font-stretch:120%;text-transform:uppercase;letter-spacing:-.01em;
+  font-size:clamp(20px,3.1vw,42px)}
+.ticker b{color:var(--accent);font-weight:700}
+.ticker i{font-style:normal;opacity:.22;padding:0 26px}
+@keyframes slide{to{transform:translateX(-50%)}}
+
+section{padding:clamp(72px,10vw,150px) 0;border-top:1px solid var(--rule-2)}
+section.light{background:var(--bg);color:var(--fg);border-top:none}
+.shead{display:flex;gap:clamp(16px,3vw,52px);align-items:baseline;margin-bottom:16px}
+.shead .n{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--accent);
+  padding-top:.7em;flex:0 0 auto}
+.shead h2{margin:0;font-weight:800;font-stretch:110%;text-transform:uppercase;
+  letter-spacing:-.025em;font-size:clamp(26px,5vw,68px);line-height:.92}
+.snote{margin:0 0 44px;color:var(--muted);max-width:66ch;font-size:clamp(14.5px,1.2vw,17px);
+  padding-left:calc(clamp(16px,3vw,52px) + 22px)}
+.snote em{color:var(--fg);font-style:normal}
+@media(max-width:700px){.snote{padding-left:0}}
+
+.rv{opacity:0;transform:translateY(26px);transition:opacity .8s ease,transform .8s cubic-bezier(.16,1,.3,1)}
+.rv.in{opacity:1;transform:none}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);
+  border:1px solid var(--rule)}
+.stat{background:var(--bg);padding:clamp(20px,2.6vw,34px)}
+.stat .v{font-family:var(--mono);font-weight:500;line-height:1;letter-spacing:-.04em;
+  font-size:clamp(30px,5.4vw,68px);display:block}
+.stat .v.hl{color:var(--accent)}
+.stat .v small{font-size:.44em;color:var(--faint);letter-spacing:0}
+.stat .k{display:block;margin-top:16px;font-size:12.5px;color:var(--muted);
+  font-family:var(--mono);letter-spacing:.03em}
+@media(max-width:780px){.stats{grid-template-columns:1fr}}
+
+.pull{font-weight:700;font-stretch:104%;letter-spacing:-.028em;line-height:1.06;
+  font-size:clamp(24px,4.2vw,58px);max-width:20ch;margin:0}
+.pull b{color:var(--accent);font-weight:700}
+.pullnote{margin:34px 0 0;color:var(--muted);max-width:52ch}
+
+.stage{border:1px solid var(--rule);position:relative;overflow:hidden;min-height:460px;
+  background:radial-gradient(115% 78% at 50% 4%,#191B10 0%,#0E1009 52%,#080906 100%)}
+.stage .tip{position:absolute;display:none;pointer-events:none;z-index:5;background:#050604;
+  color:#F2EDE3;border:1px solid #2C2F26;padding:10px 13px;font-size:12px;line-height:1.5;max-width:250px}
+.stage .tip-reason{color:#7C8074}
+.legend{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:18px;font-family:var(--mono);
+  font-size:11.5px;letter-spacing:.05em;color:var(--muted)}
+.legend span{display:flex;align-items:center;gap:9px}
+.legend i{width:9px;height:9px;flex:0 0 auto}
+.legend .hint{margin-left:auto;color:var(--faint)}
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,4vw,72px)}
+@media(max-width:880px){.cols{grid-template-columns:1fr}}
+table.tally{width:100%;border-collapse:collapse}
+table.tally td{padding:13px 0;border-bottom:1px solid var(--rule-2);font-size:14.5px}
+table.tally td.figure{text-align:right;font-family:var(--mono);white-space:nowrap}
+table.tally tr.headline td{padding:22px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+table.tally tr.headline td:first-child{font-weight:700;font-size:16px}
+table.tally tr.headline .figure{font-size:clamp(28px,4vw,52px);letter-spacing:-.04em;font-weight:500}
+.ok{color:var(--green)}.warn{color:var(--red)}
+.light .ok{color:#2F7A4E}.light .warn{color:#B23A22}
+.sub{display:block;font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px}
+button{font:inherit;font-size:12px;font-family:var(--mono);letter-spacing:.08em;
+  text-transform:uppercase;padding:13px 20px;background:transparent;color:var(--fg);
+  border:1px solid var(--rule);cursor:pointer;transition:all .18s}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#14150F}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.banner{margin-top:18px;padding:16px 18px;font-size:13.5px;line-height:1.6;
+  border-left:2px solid var(--accent);background:var(--panel);color:var(--muted)}
+
+.drift .amt{font-family:var(--mono);font-weight:500;color:var(--accent);line-height:.9;
+  letter-spacing:-.045em;font-size:clamp(46px,11vw,150px)}
+.drift p{margin:26px 0 0;color:var(--muted);max-width:54ch;font-size:16px}
+.methods{display:flex;flex-wrap:wrap;gap:14px 34px;margin-top:30px;padding-top:22px;
+  border-top:1px solid var(--rule);font-family:var(--mono);font-size:13px}
+.methods b{color:var(--faint);font-weight:400;margin-right:9px}
+
+.scroller{max-height:min(74svh,860px);overflow-y:auto;border:1px solid var(--rule)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:22px}
+.chip{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  padding:10px 16px;border:1px solid var(--rule);background:transparent;color:var(--fg);
+  cursor:pointer;transition:all .16s}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#14150F}
+.chip b{font-weight:500;opacity:.6;margin-left:8px}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);margin-bottom:30px}
+.qcard{background:var(--bg);padding:24px 22px;text-align:left;border:none;cursor:pointer;
+  font-family:var(--sans);text-transform:none;letter-spacing:normal;transition:background .16s}
+.qcard:hover{background:var(--panel);color:var(--fg)}
+.qcard[aria-pressed="true"]{background:var(--panel);box-shadow:inset 3px 0 0 var(--red)}
+.qcard .qn{font-family:var(--mono);font-size:clamp(30px,3.6vw,46px);line-height:1;
+  color:var(--red);letter-spacing:-.04em;display:block}
+.light .qcard .qn{color:#B23A22}
+.qcard .qt{display:block;margin-top:12px;font-size:14px;font-weight:700;text-transform:capitalize}
+.qcard .qd{display:block;margin-top:7px;font-size:12.5px;color:var(--muted);line-height:1.45}
+.tallybar{display:flex;flex-wrap:wrap;gap:12px 40px;margin-bottom:26px;font-family:var(--mono);
+  font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.tallybar b{color:var(--fg);font-weight:500}
+table.ledger{width:100%;border-collapse:collapse;font-size:13.5px}
+table.ledger thead th{position:sticky;top:0;background:var(--panel);text-align:left;
+  font-family:var(--mono);font-weight:400;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);padding:14px;border-bottom:1px solid var(--rule)}
+table.ledger th.r,table.ledger td.r{text-align:right}
+table.ledger td{padding:13px 14px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+table.ledger tbody tr{cursor:pointer;transition:background .12s}
+table.ledger tbody tr:hover{background:var(--panel)}
+table.ledger tbody tr.exception{background:rgba(226,84,60,.08)}
+table.ledger tbody tr.adjudicated{background:rgba(232,163,61,.1)}
+.narr{color:var(--faint);font-size:11px;display:block;margin-top:5px;font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
+.action{color:var(--red);font-size:12.5px;display:block;margin-top:7px;line-height:1.45}
+.light .action{color:#B23A22}
+.tier{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.tier.t4{color:var(--accent)}.tier.t5{color:var(--red)}
+.light .tier.t5{color:#B23A22}
+
+#detail{display:none;border:1px solid var(--accent);background:var(--panel);
+  padding:clamp(20px,2.6vw,30px);margin-bottom:22px}
+#detail table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px}
+#detail td{padding:9px 0;border-bottom:1px solid var(--rule-2)}
+#detail td:last-child{text-align:right;font-family:var(--mono);white-space:nowrap}
+#detail .residual td{border-top:1px solid var(--rule);border-bottom:none;font-weight:700;padding-top:14px}
+
+.exc{border-left:2px solid var(--red);padding:2px 0 2px 20px;margin:26px 0}
+.exc h3{margin:0;font-size:16px;font-weight:700;text-transform:capitalize}
+.exc h3 .count{font-family:var(--mono);color:var(--red);margin-right:14px;font-weight:500}
+.exc p{margin:6px 0 0;font-size:13.5px;color:var(--muted)}
+
+footer{padding:clamp(56px,7vw,100px) 0 60px;border-top:1px solid var(--rule)}
+.fmark{overflow:hidden;padding-bottom:.06em;font-weight:800;font-stretch:120%;text-transform:uppercase;letter-spacing:-.035em;
+  font-size:clamp(52px,16vw,220px);line-height:.8;margin:0;color:var(--rule)}
+footer p{margin:28px 0 0;color:var(--faint);font-family:var(--mono);font-size:12px}
+.loading{color:var(--muted);font-family:var(--mono);font-size:12px;letter-spacing:.06em}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#33362C}
+@media(prefers-reduced-motion:reduce){
+  .display .ln span{transform:none}.rv{opacity:1;transform:none}.ticker div{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="nav"><div class="nav-in">
+  <span class="mark">KOSH <s>कोष</s></span>
+  <ol>
+    <li><a href="#cascade">01 Cascade</a></li><li><a href="#tally">02 Tally</a></li>
+    <li><a href="#model">03 Model</a></li><li><a href="#money">04 Money</a></li>
+    <li><a href="#lines">05 Ledger</a></li><li><a href="#quar">06 Quarantine</a></li>
+  </ol>
+</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <p class="eyebrow">RAZORPAY AI BUILDATHON · TRACK 04 · AI FINANCE CONTROLLER</p>
+    <h1 class="display">
+      <span class="ln"><span>Settlement</span></span>
+      <span class="ln"><span>reconciliation</span></span>
+      <span class="ln"><span class="amber">that refuses<br>to guess.</span></span>
+    </h1>
+    <p class="lede">
+      One bank credit is rarely one payment. It is a batch — net of fees, GST on those fees,
+      refunds and holds — settled two days late under a UTR that may not have survived into the
+      narration. Kosh ties it back, types every failure it cannot resolve, and declines rather
+      than inventing a match.
+    </p>
+    <div class="cue">
+      <span class="k" id="runline">RECONCILING…</span>
+      <span class="k" style="margin-left:auto">SCROLL ↓</span>
+    </div>
+  </div>
+</div>
+
+<div class="ticker"><div id="ticker"></div></div>
+
+<div class="wrap">
+  <section id="problem">
+    <div class="shead rv"><span class="n">00</span><h2>The problem</h2></div>
+    <div class="cols">
+      <p class="pull rv">A single credit of ₹4,87,213 is <b>312 payments</b>, minus fees, minus GST,
+        minus two refunds, settled T+2.</p>
+      <div class="rv">
+        <p class="pullnote">Finance teams do this in Excel. The obvious fix is subset-sum — find
+          the rows that add up to the credit — and it is silently wrong: past about twenty rows
+          there are more subsets than achievable paise values, so spurious exact matches become
+          certain.</p>
+        <p class="pullnote">Kosh constrains the pool with a structural prior first, attaches a
+          collision risk to every arithmetic match, and declines the ones it cannot justify.</p>
+      </div>
+    </div>
+    <div class="stats rv" id="stats" style="margin-top:clamp(40px,6vw,80px)"></div>
+  </section>
+
+  <section id="cascade">
+    <div class="shead rv"><span class="n">01</span><h2>The cascade floor</h2></div>
+    <p class="snote rv">Every bank line rests on the tier that actually resolved it; cube height
+      is the amount. The crowded top slab and the near-empty adjudicator slab below it are the
+      whole argument — <em>almost nothing needed a model.</em></p>
+    <div class="stage rv" id="scene"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+</div>
+
+<section id="tally" class="light"><div class="wrap">
+  <div class="shead rv"><span class="n">02</span><h2>The tally</h2></div>
+  <p class="snote rv">Recall is how much got matched. The false-match rate is how much got matched
+    <em>wrongly</em>, and it is the number to read first: a missed match costs an analyst ten
+    minutes, a wrong match misstates the books and nobody finds out.</p>
+  <div class="cols rv">
+    <table class="tally" id="tally-a"></table>
+    <table class="tally" id="tally-b"></table>
+  </div>
+</div></section>
+
+<div class="wrap">
+  <section id="model">
+    <div class="shead rv"><span class="n">03</span><h2>Where the model was used</h2></div>
+    <p class="snote rv">Every tier below the adjudicator is deterministic and costs nothing but
+      CPU. The model sees a closed list of candidates the engine already computed, and can only
+      pick one or abstain — enforced in code, not in the prompt. Switch it off to see the floor.</p>
+    <div class="cols">
+      <table class="tally rv" id="budget"></table>
+      <div class="rv">
+        <div class="controls">
+          <button id="toggle-ai" aria-pressed="true">Adjudicator on</button>
+          <button id="chaos">Break it on purpose</button>
+          <button id="verify">Verify chain</button>
+        </div>
+        <div id="banner"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="money">
+    <div class="shead rv"><span class="n">04</span><h2>Money left on the table</h2></div>
+    <p class="snote rv">The same rows, checked against the contracted MDR. Reconciliation tells
+      you the books tie out; this tells you the gateway owes you money.</p>
+    <div class="drift rv" id="drift"></div>
+  </section>
+</div>
+
+<section id="lines" class="light"><div class="wrap-wide">
+  <div class="shead rv"><span class="n">05</span><h2>The ledger</h2></div>
+  <p class="snote rv">Every bank line, what resolved it, and on what basis. Exceptions are grouped
+    below by type, because an operator routes on the type and not the count &mdash; select one to
+    filter the ledger to it.</p>
+  <div class="tallybar rv" id="tallybar"></div>
+  <div class="qgrid rv" id="exceptions"></div>
+  <div class="chips rv" id="chips"></div>
+  <div id="detail"></div>
+  <div class="scroller rv">
+    <table class="ledger" id="ledger"><thead><tr>
+      <th>Date</th><th>Bank line</th><th class="r">Amount</th>
+      <th class="r">Rows</th><th>Resolved by</th><th>Basis</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+</div></section>
+
+<div class="wrap">
+
+  <section id="quar">
+    <div class="shead rv"><span class="n">06</span><h2>Quarantine</h2></div>
+    <p class="snote rv">Rows that failed to parse. The run continued without them.</p>
+    <div class="rv" id="quarantine"></div>
+  </section>
+
+  <footer>
+    <p class="fmark">KOSH</p>
+    <p>कोष · TREASURY — SETTLEMENT RECONCILIATION · EVERY FIGURE REGENERATED BY
+      <span style="color:var(--muted)">python -m kosh sweep</span></p>
+  </footer>
+</div>
+
+<script type="module">
+import { mountCascade } from "/cascade3d.js";
+const $ = (id) => document.getElementById(id);
+let state = { ai: true, chaos: false, data: null, filter: "all" };
+let scene3d = null;
+
+const inr = (p) => {
+  const neg = p < 0; p = Math.abs(p);
+  const r = Math.floor(p/100), f = String(p%100).padStart(2,"0");
+  const s = String(r), l3 = s.slice(-3), rest = s.slice(0,-3);
+  return (neg?"-":"") + "₹" + (rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g,",")+","+l3 : l3) + "." + f;
+};
+const pct = (x) => (100*x).toFixed(1) + "%";
+const TIER_COLORS = { tier1_exact:"#3E9E6B", tier2_fuzzy:"#7CC79A", tier3_subset_sum:"#4E93C9",
+  tier4_adjudicated:"#E8A33D", tier5_exception:"#E2543C" };
+
+const reveal = "IntersectionObserver" in window
+  ? new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add("in"); reveal.unobserve(e.target); }
+    }), { rootMargin: "0px 0px -8% 0px" })
+  : null;
+const watch = (root=document) => root.querySelectorAll(".rv:not(.in)").forEach(
+  (el) => reveal ? reveal.observe(el) : el.classList.add("in"));
+
+async function load() {
+  const q = new URLSearchParams({ ai: state.ai ? "1":"0" });
+  if (state.chaos) { q.set("fail","0.5"); q.set("truncate","0.2"); }
+  $("runline").textContent = "RECONCILING…";
+  state.data = await (await fetch("/api/run?"+q)).json();
+  render();
+}
+
+function render() {
+  const d = state.data, s = d.summary, b = d.budget, sc = d.scorecard;
+  const rate = s.bank_lines ? s.matched/s.bank_lines : 0;
+
+  $("runline").innerHTML = `RUN ${s.run_id} · ${d.config.toUpperCase()} ·
+    ${s.settlement_rows.toLocaleString()} ROWS · ${d.totals.credits} · ${s.wall_seconds}s`;
+
+  $("ticker").innerHTML = (() => {
+    const bits = [
+      `<b>${sc ? (100*sc.derived.false_match_rate).toFixed(2)+"%" : "—"}</b> false matches`,
+      `${sc ? sc.matched : s.matched} accepted`,
+      `<b>${b.model_calls}</b> model call${b.model_calls===1?"":"s"}`,
+      `${b.resolved_without_ai_pct}% without AI`,
+      `${s.quarantined} quarantined`,
+      `chain intact`,
+    ];
+    const run = bits.join('<i>◆</i>') + '<i>◆</i>';
+    return run + run;
+  })();
+
+  $("stats").innerHTML = `
+    <div class="stat"><span class="v hl">${sc ? (100*sc.derived.false_match_rate).toFixed(2)+"%" : "n/a"}</span>
+      <span class="k">FALSE-MATCH RATE${sc ? " · "+sc.wrong_matches+" WRONG OF "+sc.matched : ""}</span></div>
+    <div class="stat"><span class="v">${pct(rate)}</span>
+      <span class="k">MATCHED AUTOMATICALLY · ${s.matched} OF ${s.bank_lines}</span></div>
+    <div class="stat"><span class="v">${b.model_calls}<small>/${s.bank_lines}</small></span>
+      <span class="k">LINES THAT NEEDED A MODEL</span></div>`;
+
+  $("tally-a").innerHTML = `
+    <tr class="headline"><td>False-match rate<span class="sub">accepted matches that are wrong, against ground truth</span></td>
+      <td class="figure ${sc && sc.wrong_matches ? "warn":"ok"}">${sc ? (100*sc.derived.false_match_rate).toFixed(2)+"%" : "not measurable"}</td></tr>
+    ${sc ? `<tr><td>Precision</td><td class="figure">${(100*sc.derived.precision).toFixed(2)}%</td></tr>
+    <tr><td>Recall</td><td class="figure">${(100*sc.derived.recall).toFixed(2)}%</td></tr>
+    <tr><td>Exception type accuracy</td><td class="figure">${(100*sc.derived.exception_type_accuracy).toFixed(1)}%</td></tr>` : ""}`;
+
+  $("tally-b").innerHTML = `
+    <tr class="headline"><td>Auto-match rate<span class="sub">resolved with no human involved</span></td>
+      <td class="figure">${pct(rate)}</td></tr>
+    <tr><td>Raised as exceptions</td><td class="figure">${s.exceptions}</td></tr>
+    <tr><td>Quarantined rows</td><td class="figure">${s.quarantined}</td></tr>
+    <tr><td>Throughput</td><td class="figure">${s.wall_seconds ? Math.round(s.settlement_rows/s.wall_seconds).toLocaleString():"—"} rows/s</td></tr>`;
+
+  $("budget").innerHTML = `
+    <tr class="headline"><td>Resolved without a model<span class="sub">tiers 1 to 3, deterministic</span></td>
+      <td class="figure">${b.resolved_without_ai_pct}%</td></tr>
+    <tr><td>Escalated to the adjudicator</td><td class="figure">${b.escalated_to_model}</td></tr>
+    <tr><td>Model calls</td><td class="figure">${b.model_calls}</td></tr>
+    <tr><td>Failed and degraded safely</td><td class="figure">${b.degraded_calls}</td></tr>
+    <tr><td>Tokens</td><td class="figure">${b.tokens.toLocaleString()}</td></tr>
+    <tr><td>Estimated cost</td><td class="figure">₹${b.estimated_cost_inr.toFixed(2)}</td></tr>`;
+
+  const dr = d.drift || {};
+  $("drift").innerHTML = dr.flagged
+    ? `<div class="amt">${dr.total_excess}</div>
+       <p>${dr.flagged.toLocaleString()} of ${dr.rows_checked.toLocaleString()} payments were charged
+       above the contracted rate of ${(dr.contracted_bps/100).toFixed(2)}%.</p>
+       <div class="methods">${Object.entries(dr.by_method_display||{}).map(([m,v])=>`<span><b>${m}</b>${v}</span>`).join("")}</div>`
+    : `<p>Every payment was charged at or below the contracted rate.</p>`;
+
+  $("tallybar").innerHTML = [
+    `<span><b>${s.bank_lines}</b> BANK LINES</span>`,
+    `<span><b>${s.matched}</b> MATCHED</span>`,
+    `<span><b>${s.exceptions}</b> EXCEPTIONS</span>`,
+    `<span><b>${s.quarantined}</b> QUARANTINED</span>`,
+    `<span><b>${d.totals.credits}</b> CREDITED</span>`,
+  ].join("");
+
+  const groups = {};
+  d.lines.filter((l) => !l.matched).forEach((l) => {
+    const k = l.exception_type || "untyped";
+    (groups[k] = groups[k] || { n: 0, action: l.action }).n++;
+  });
+  $("exceptions").innerHTML = Object.entries(groups).sort((a, b) => b[1].n - a[1].n)
+    .map(([k, v]) => `<button class="qcard" data-f="${k}" aria-pressed="${state.filter === k}">
+      <span class="qn">${v.n}</span><span class="qt">${k.replace(/_/g, " ")}</span>
+      <span class="qd">${v.action || ""}</span></button>`).join("")
+    || `<p class="snote" style="padding:0">Nothing outstanding.</p>`;
+
+  $("chips").innerHTML = [
+    ["all", "All lines", s.bank_lines],
+    ["matched", "Matched", s.matched],
+    ["exceptions", "Exceptions", s.exceptions],
+    ["tier4_adjudicated", "Model decided", counts0(d, "tier4_adjudicated")],
+    ["tier3_subset_sum", "Arithmetic", counts0(d, "tier3_subset_sum")],
+  ].map(([f, label, n]) =>
+    `<button class="chip" data-f="${f}" aria-pressed="${state.filter === f}">${label}<b>${n}</b></button>`
+  ).join("");
+
+  document.querySelectorAll("[data-f]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.filter = state.filter === el.dataset.f ? "all" : el.dataset.f;
+      render();
+      document.getElementById("lines").scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
+
+  renderLedger();
+
+  if (scene3d) scene3d.dispose();
+  scene3d = mountCascade($("scene"), d.lines, showDetail);
+
+  const counts = {};
+  d.lines.forEach((l) => (counts[l.tier] = (counts[l.tier] || 0) + 1));
+  $("legend").innerHTML = Object.entries(TIER_COLORS).map(([k, c]) =>
+    `<span><i style="background:${c}"></i>${k.replace("tier", "").replace(/_/g, " ").trim()} · ${counts[k] || 0}</span>`
+  ).join("") + `<span class="hint">DRAG TO ORBIT · SCROLL TO ZOOM</span>`;
+
+  $("quarantine").innerHTML = d.quarantined.length
+    ? `<div class="scroller"><table class="ledger"><thead><tr><th>File</th><th>Line</th><th>Reason</th></tr></thead><tbody>${
+      d.quarantined.map((q) => `<tr style="cursor:default"><td>${q.source}</td><td class="num">${q.line}</td><td>${q.reason}</td></tr>`).join("")
+      }</tbody></table></div>`
+    : `<p class="snote" style="padding:0">Every row parsed cleanly.</p>`;
+
+  watch();
+}
+
+function counts0(d, tier) {
+  return d.lines.filter((l) => l.tier === tier).length;
+}
+
+function matchesFilter(l) {
+  const f = state.filter;
+  if (f === "all") return true;
+  if (f === "matched") return l.matched;
+  if (f === "exceptions") return !l.matched;
+  if (f.startsWith("tier")) return l.tier === f;
+  return l.exception_type === f;
+}
+
+function renderLedger() {
+  const rows = state.data.lines.filter(matchesFilter);
+  const tb = $("ledger").querySelector("tbody");
+  tb.innerHTML = rows.map((l) => {
+    const cls = !l.matched ? "exception" : l.tier === "tier4_adjudicated" ? "adjudicated" : "";
+    const tc = l.tier === "tier4_adjudicated" ? "t4" : l.tier === "tier5_exception" ? "t5" : "";
+    const lb = l.matched ? l.tier.replace("tier", "").replace("_", " ") : (l.exception_type || "exception");
+    return `<tr class="${cls}" data-txn="${l.txn_id}">
+      <td class="num" style="white-space:nowrap">${l.value_date}</td>
+      <td>${l.txn_id}<span class="narr">${l.narration}</span></td>
+      <td class="r num" style="white-space:nowrap">${l.amount}</td>
+      <td class="r num">${l.rows || "—"}</td><td class="tier ${tc}">${lb}</td>
+      <td>${l.reason}${l.action ? `<span class="action">→ ${l.action}</span>` : ""}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--muted)">No lines match this filter.</td></tr>`;
+  tb.querySelectorAll("tr[data-txn]").forEach((tr) =>
+    tr.addEventListener("click", () => showDetail(tr.dataset.txn)));
+}
+
+async function showDetail(txn) {
+  const box = $("detail");
+  box.style.display = "block";
+  box.innerHTML = '<span class="loading">LOADING…</span>';
+  const e = await (await fetch("/api/explain/"+txn)).json();
+  if (e.error) { box.innerHTML = e.error; return; }
+  if (!e.matched) {
+    const g = e.diagnostics||{};
+    box.innerHTML = `<b class="num">${e.txn_id}</b> · <span style="color:var(--red)">${
+      (e.exception_type||"exception").replace(/_/g," ")}</span>
+      <div class="narr" style="max-width:none;white-space:normal">${e.narration||""}</div>
+      <table>
+        <tr><td>Bank credit</td><td>${inr(e.bank_credit_paise)}</td></tr>
+        <tr><td>Why it was not matched</td><td style="text-align:left;font-family:var(--sans);color:var(--muted)">${e.reason}</td></tr>
+        <tr><td>Candidates considered</td><td>${g.candidates_considered??0}</td></tr>
+        <tr><td>Unclaimed rows within 3 days</td><td>${g.unclaimed_rows_near_this_date??0}</td></tr>
+        <tr class="residual"><td>Their net total</td><td>${inr(g.unclaimed_net_paise||0)}</td></tr>
+      </table><div class="banner">→ ${e.suggested_action||""}</div>`;
+  } else {
+    const c = e.components;
+    box.innerHTML = `<b class="num">${e.txn_id}</b> · <span style="color:var(--muted)">${e.reason}</span>
+      <table>
+        <tr><td>${c.payments.count} payments, gross</td><td>${inr(c.payments.gross_paise)}</td></tr>
+        <tr><td>Platform fee</td><td>${inr(c.platform_fee_paise)}</td></tr>
+        <tr><td>GST on fee</td><td>${inr(c.gst_on_fee_paise)}</td></tr>
+        ${c.refunds.count?`<tr><td>${c.refunds.count} refunds</td><td>${inr(c.refunds.paise)}</td></tr>`:""}
+        ${c.adjustments.count?`<tr><td>${c.adjustments.count} adjustments</td><td>${inr(c.adjustments.paise)}</td></tr>`:""}
+        <tr><td>Computed net</td><td>${inr(e.computed_net_paise)}</td></tr>
+        <tr><td>Bank credit</td><td>${inr(e.bank_credit_paise)}</td></tr>
+        <tr class="residual"><td>Residual</td><td class="${e.residual_paise?"warn":"ok"}">${inr(e.residual_paise)}</td></tr>
+      </table>`;
+  }
+  box.scrollIntoView({ behavior:"smooth", block:"nearest" });
+}
+
+$("toggle-ai").addEventListener("click",(ev)=>{
+  state.ai=!state.ai; ev.target.setAttribute("aria-pressed",String(state.ai));
+  ev.target.textContent = state.ai ? "Adjudicator on":"Adjudicator off"; load(); });
+$("chaos").addEventListener("click",(ev)=>{
+  state.chaos=!state.chaos; ev.target.setAttribute("aria-pressed",String(state.chaos));
+  ev.target.textContent = state.chaos ? "Faults injected":"Break it on purpose";
+  $("banner").innerHTML = state.chaos ? `<div class="banner">Half the adjudicator calls now fail and
+    a fifth of the bank statement is missing. The run still completes; unresolved lines go to the
+    queue rather than being guessed.</div>` : ""; load(); });
+$("verify").addEventListener("click", async ()=>{
+  const v = await (await fetch("/api/verify")).json();
+  $("banner").innerHTML = `<div class="banner">Audit chain ${v.intact?"intact":"BROKEN at "+v.breaks.length+" point(s)"}
+    across ${v.entries.toLocaleString()} entries. Each record hashes the one before it, so editing any
+    historical row invalidates every hash after it.</div>`; });
+
+const links = [...document.querySelectorAll(".nav a")];
+if ("IntersectionObserver" in window) {
+  const spy = new IntersectionObserver((es)=>es.forEach((e)=>{
+    if (!e.isIntersecting) return;
+    links.forEach((a)=>a.classList.toggle("on", a.getAttribute("href")==="#"+e.target.id));
+  }), { rootMargin:"-45% 0px -50% 0px" });
+  document.querySelectorAll("section[id]").forEach((s)=>spy.observe(s));
+}
+
+watch();
+requestAnimationFrame(()=>document.body.classList.add("ready"));
+load();
+</script>
+</body>
+</html>

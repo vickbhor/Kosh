@@ -75,8 +75,8 @@ instead of forcing a match.
 Requires Python 3.11 or newer. Nothing to install, no API key needed.
 
 ```bash
-git clone https://github.com/<you>/kosh.git
-cd kosh
+git clone https://github.com/vickbhor/Kosh.git
+cd Kosh
 pip install pytest
 ```
 

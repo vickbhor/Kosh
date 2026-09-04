@@ -7,6 +7,10 @@
 
 Built for the Razorpay AI Buildathon — **Track 04, AI Finance Controller**.
 
+![Kosh — hero](docs/hero1.png)
+
+![Kosh — the numbers](docs/hero2.png)
+
 | | |
 |---|---|
 | **What it does** | Matches bank credits back to a payment gateway's settlement report |
@@ -86,7 +90,7 @@ Then, in order:
 
 ```bash
 python -m pytest -q
-# 64 passed in 1.6s
+# 64 passed in 1.5s
 ```
 
 **Generate a dataset.** Creates fake-but-realistic CSVs *with ground-truth
@@ -219,7 +223,11 @@ there. You can see the risk on every matched row in the dashboard, e.g.
 
 ## 6. How the matching works
 
-Five tiers, cheapest and most certain first.
+Five tiers, cheapest and most certain first. Every bank line comes to rest on the
+tier that resolved it — the crowded top slab and the near-empty adjudicator slab
+below it are the whole argument:
+
+![The cascade floor](docs/cascade.png)
 
 ### Tier 1 — Exact (≈50% of lines)
 
@@ -304,6 +312,10 @@ A prompt is a request; code is a guarantee. Four tests cover it.
 The dashboard has an **Adjudicator off** toggle that reruns the entire batch with
 no model. It still resolves 88.8%. That is the point.
 
+On the demo dataset the adjudicator fires **once in 134 lines**, and on that one
+line it correctly abstained on a genuine tie. So zero lines in this run were
+decided by a model — which is the design working, not the design failing.
+
 ---
 
 ## 8. When things go wrong
@@ -351,6 +363,12 @@ About twenty lines of code that turn "trust our output" into "check our output".
 
 ## 9. Beyond reconciliation
 
+**Queue-driven ledger.** Exception types are cards; selecting one filters the
+ledger to those lines, because an operator reading a queue immediately wants the
+lines behind it.
+
+![The ledger and exception queue](docs/ledger.png)
+
 **Fee drift — finding money.** The same rows, checked against the contracted MDR.
 On the demo dataset, **88 payments were charged above contract**. Reconciliation
 tells you the books tie out; this tells you the gateway owes you money.
@@ -365,10 +383,6 @@ the tier that resolved it, cube height scaled to the amount. It shows the one
 thing a table cannot: a table says the adjudicator fired once, the floor shows
 how alone that cube is. Degrades to the tables without WebGL or under
 `prefers-reduced-motion`.
-
-**Queue-driven ledger.** Exception types are cards; selecting one filters the
-ledger to those lines, because an operator reading a queue immediately wants the
-lines behind it.
 
 ---
 
@@ -394,7 +408,8 @@ Docker:
 docker build -t kosh . && docker run -p 8000:8000 kosh
 ```
 
-Optional — enable the real adjudicator. Everything works without it:
+Optional — enable the live adjudicator. Everything works without it, and every
+number in this README was produced without it:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...     # Windows: set ANTHROPIC_API_KEY=...
@@ -431,10 +446,10 @@ tests/test_kosh.py   64 tests, organised by property not by module
 
 **Suggested reading order for a reviewer:**
 
-1. `matchers/cascade.py` — the module docstring explains the whole design
-2. `matchers/subset_sum.py` — why the solver is bounded
-3. `core/adjudicator.py` — `_validate`, the "cannot invent a match" guarantee
-4. `eval/generator.py` — every accuracy claim traces back here
+1. `kosh/matchers/cascade.py` — the module docstring explains the whole design
+2. `kosh/matchers/subset_sum.py` — why the solver is bounded
+3. `kosh/core/adjudicator.py` — `_validate`, the "cannot invent a match" guarantee
+4. `kosh/eval/generator.py` — every accuracy claim traces back here
 5. `tests/test_kosh.py` — the properties that must hold
 
 **Money handling.** Every amount is an integer of paise. Floats appear only at
@@ -462,12 +477,13 @@ CSS and JS cache aggressively.
 **`python: command not found`.** Try `python3`. On Windows, reinstall Python with
 "Add to PATH" ticked.
 
-**Tests fail on import.** Run from the repository root, not from inside `kosh/`.
+**Tests fail with `No module named 'kosh.core'`.** Run from the repository root,
+the folder containing `kosh/`, `tests/` and `web/` — not from inside `kosh/`.
 
 **Port 8000 is in use.** `python -m kosh serve --port 8123`.
 
 **`llm_tokens: 0` and `estimated_cost_inr: 0.0`.** No `ANTHROPIC_API_KEY` is set,
-so the offline adjudicator ran. Expected, and everything else works.
+so the offline adjudicator ran. Expected — see section 13.
 
 **`4 adjudicated · 0` in the legend.** Not a bug. One line escalated, the
 adjudicator abstained on a genuine tie, and it went to the queue. Zero lines were
@@ -479,6 +495,11 @@ decided by a model.
 
 Honest scope, since the brief asks what broke.
 
+- **The live model path has never been executed.** `ClaudeAdjudicator` is
+  implemented and unit-tested against unknown candidate ids, malformed JSON,
+  non-string ids and timeouts, but no API credit was available during the build,
+  so every run in this repo used the offline adjudicator. Both apply the same
+  abstain-on-ties policy, so the paths are comparable but not identical.
 - **Order-to-payment reconciliation** is modelled in the data but the cascade
   only reconciles bank-to-settlement. That is the harder and more valuable axis;
   the other is a straightforward join.
@@ -487,9 +508,7 @@ Honest scope, since the brief asks what broke.
   settlement report column layout, so swapping in a real export is a loader
   change.
 - **Adjudicator accuracy is not separately measured.** It fires on roughly 1% of
-  lines — too few for a meaningful precision figure. The offline heuristic used
-  in tests applies the same abstain-on-ties policy, so the two paths are
-  comparable but not equivalent.
+  lines — too few for a meaningful precision figure.
 - **The collision-risk estimate is crude** — a deliberately pessimistic
   uniform-distribution approximation. Good enough to separate safe strategies
   from unsafe ones by orders of magnitude, not to be quoted as a probability.

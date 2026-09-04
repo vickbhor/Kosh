@@ -7,11 +7,6 @@
 
 Built for the Razorpay AI Buildathon — **Track 04, AI Finance Controller**.
 
-<<<<<<< HEAD
-![Kosh — hero](docs/hero1.png)
-
-![Kosh — the numbers](docs/hero2.png)
-=======
 ## The dashboard
 
 | | |
@@ -22,7 +17,6 @@ Built for the Razorpay AI Buildathon — **Track 04, AI Finance Controller**.
 | **The cascade floor** — every line rests on the tier that resolved it; the adjudicator slab is nearly empty | **The ledger** — exception types are cards, and selecting one filters the ledger |
 
 ---
->>>>>>> 5665a91 (Saving local changes before sync)
 
 | | |
 |---|---|
@@ -238,13 +232,7 @@ there. You can see the risk on every matched row in the dashboard, e.g.
 
 Five tiers, cheapest and most certain first. Every bank line comes to rest on the
 tier that resolved it — the crowded top slab and the near-empty adjudicator slab
-<<<<<<< HEAD
-below it are the whole argument:
-
-![The cascade floor](docs/cascade.png)
-=======
 below it are the whole argument.
->>>>>>> 5665a91 (Saving local changes before sync)
 
 ### Tier 1 — Exact (≈50% of lines)
 
@@ -384,11 +372,6 @@ About twenty lines of code that turn "trust our output" into "check our output".
 ledger to those lines, because an operator reading a queue immediately wants the
 lines behind it.
 
-<<<<<<< HEAD
-![The ledger and exception queue](docs/ledger.png)
-
-=======
->>>>>>> 5665a91 (Saving local changes before sync)
 **Fee drift — finding money.** The same rows, checked against the contracted MDR.
 On the demo dataset, **88 payments were charged above contract**. Reconciliation
 tells you the books tie out; this tells you the gateway owes you money.
